@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tabnest</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><img src="icons/icon48.png" alt="" width="36" height="36"><div><h1>tabnest<span>●</span></h1><p>A little space to think.</p></div></div>
+    <span id="state" class="badge">Loading</span>
+  </header>
+  <main>
+    <section class="hero" aria-label="Tab overview">
+      <div class="eyebrow">YOUR CURRENT WINDOW</div>
+      <h2>Less clutter.<br>More headspace.</h2>
+      <div class="stats"><div><strong id="total">—</strong><span>open tabs</span></div><div><strong id="groupCount">—</strong><span>tab groups</span></div><div><strong id="grouped">—</strong><span>grouped tabs</span></div></div>
+      <button id="organize" class="primary" disabled><span aria-hidden="true">✦</span> Organize this window <span aria-hidden="true">↗</span></button>
+    </section>
+    <section class="auto-row"><div><label for="enabled">Keep things tidy</label><p>Automatically group tabs as you browse.</p></div><input id="enabled" class="switch" type="checkbox" role="switch" disabled></section>
+    <section class="groups-section" aria-labelledby="groups-heading"><div class="section-title"><h3 id="groups-heading">Your groups</h3><span>Click to fold / unfold</span></div><div id="groups"><p class="empty">Finding your tabs…</p></div></section>
+    <p id="diagnostics" class="hint" aria-live="polite"></p>
+    <details id="preferences"><summary>Make it yours <span aria-hidden="true">⌄</span></summary>
+      <div class="settings">
+        <label class="field" for="mode">Group tabs by<select id="mode"><option value="smart">Categories</option><option value="site">Website only</option></select></label>
+        <p class="hint">Matches website addresses, tab titles, and the site’s declared description against your categories. Groups start with one tab; only relevant groups appear.</p>
+        <button id="manage" class="secondary">Manage categories & matching rules ↗</button>
+        <div class="correction">
+          <label class="field" for="ruleSite">Correct a website<select id="ruleSite"></select></label>
+          <label class="field" for="ruleCategory">Put it in<select id="ruleCategory"></select></label>
+          <p id="ruleReason" class="hint"></p>
+          <button id="remember" class="secondary">Remember & apply to this website</button>
+          <p class="hint">Applies now to eligible tabs in all windows and remembers the website for future grouping. Existing user groups stay intact.</p>
+        </div>
+        <label class="field" for="minTabs">Website group minimum<select id="minTabs"><option value="2">2 related tabs</option><option value="3">3 related tabs</option><option value="4">4 related tabs</option><option value="5">5 related tabs</option></select></label>
+        <label class="check"><input type="checkbox" id="collapse"> Fold new groups in the background</label>
+        <label class="check"><input type="checkbox" id="reuseDuplicates"> Reuse tabs with the exact same URL</label>
+        <p class="hint">When a new duplicate finishes loading, switch to the older tab and close the new one. Different query strings or page fragments stay separate.</p>
+        <label class="check"><input type="checkbox" id="collectLoose"> Group unrecognized sites as “Browsing”</label>
+        <p class="hint">Applies in category mode. Turn off to group unrecognized sites by website instead.</p>
+        <label class="exclude-label" for="excluded">Websites to leave alone</label>
+        <textarea id="excluded" rows="2" placeholder="example.com, mail.google.com" spellcheck="false"></textarea>
+        <p class="hint">Separate websites with commas or new lines. Includes their subdomains.</p>
+        <button id="save" class="secondary">Save preferences</button>
+        <button id="release" class="text-button">Ungroup Tabnest groups & pause</button>
+        <p class="hint">Ungroup applies to Tabnest groups in all windows this session. Tabs stay open; their original order is not restored.</p>
+      </div>
+    </details>
+    <p id="message" role="status" aria-live="polite"></p>
+  </main>
+  <footer><span class="privacy-dot"></span> On-device. No accounts. No tracking.</footer>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

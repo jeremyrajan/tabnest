@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tabnest · Your categories</title><link rel="stylesheet" href="options.css"></head>
+<body>
+  <header><img src="icons/icon48.png" width="38" height="38" alt=""><div><h1>Your tabs. Your categories.</h1><p>Give everything a place, without a fixed set of groups.</p></div></header>
+  <main>
+    <section class="intro"><h2>A starting point, not a limit.</h2><p>Rename, add, or remove categories below. Tabnest creates a group only when an open tab matches it. Website rules take priority; otherwise, it checks known domains and then keywords in tab titles and addresses. Unrecognized sites go into Browsing when enabled.</p><p>Matching runs entirely on your device. These are editable rules, not an AI model; vague titles may need a website correction in the popup. All category changes take effect when you save.</p></section>
+    <div class="toolbar"><input id="search" type="search" placeholder="Find a category…" aria-label="Find a category"><button id="add">+ Add category</button><button id="save" class="primary" disabled>Save categories</button></div>
+    <p id="status" role="status" aria-live="polite">Loading your categories…</p>
+    <div id="categories"></div>
+    <section class="rules"><h2>Remembered website corrections</h2><p>These override automatic matching. Removing a rule lets Tabnest classify that website again.</p><div id="rules"></div></section>
+    <footer><button id="reset">Restore starting categories</button><p>Restores the editable category list in this page. Save to apply. Website corrections for removed categories are cleared when you save.</p></footer>
+  </main>
+  <template id="categoryTemplate"><article class="category"><div class="heading"><input class="emoji" aria-label="Group emoji" maxlength="8" placeholder="📁"><input class="name" aria-label="Category name" maxlength="40"><select class="color" aria-label="Group color"><option>blue</option><option>purple</option><option>cyan</option><option>orange</option><option>red</option><option>pink</option><option>green</option><option>yellow</option><option>grey</option></select><button class="remove" aria-label="Remove category">Remove</button></div><label>Websites <span>Includes subdomains. Separate with commas.</span><textarea class="domains" rows="2" placeholder="example.com, another-site.com" spellcheck="false"></textarea></label><label>Title, description & address keywords <span>Words or phrases, separated with commas.</span><textarea class="keywords" rows="2" placeholder="research paper, online course" spellcheck="false"></textarea></label></article></template>
+  <script type="module" src="options.js"></script>
+</body>
+</html>
