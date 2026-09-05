@@ -1,6 +1,13 @@
-# Tabnest
+<div align="center">
+  <h1><img src="icons/icon128.png" width="52" alt="Tabnest logo"> Tabnest</h1>
+  <p><strong>A little space to think.</strong></p>
+</div>
 
-A small Chrome extension that automatically puts related tabs into color-coded tab groups. It runs entirely on your device, with no account, subscription, API key, analytics, or runtime dependencies.
+Tabnest is a small Chrome extension that automatically puts related tabs into color-coded tab groups. It runs entirely on your device, with no account, subscription, API key, analytics, or runtime dependencies.
+
+<p align="center">
+  <img src="docs/images/tabnest-popup.png" width="520" alt="Tabnest popup showing tabs organized into color-coded groups">
+</p>
 
 ## Get the source
 
