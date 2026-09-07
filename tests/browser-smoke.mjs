@@ -67,10 +67,10 @@ try {
   assert.equal(state.tabs.filter(tab => tab.groupId === developerGroups[0].id).length, 4);
   console.log("PASS: lost ownership is reconstructed without creating duplicate Developer groups");
   const manuallyPlaced = await context.newPage();
-  await manuallyPlaced.goto("https://youtube.com/manual-placement");
+  await manuallyPlaced.goto("https://studio.youtube.com/manual-placement");
   await new Promise(resolve => setTimeout(resolve, 2200));
   const manualPlacement = await worker.evaluate(async () => {
-    const [tab] = await chrome.tabs.query({ url: "https://youtube.com/manual-placement" });
+    const [tab] = await chrome.tabs.query({ url: "https://studio.youtube.com/manual-placement" });
     const [developer] = await chrome.tabGroups.query({ title: "💻 Developer" });
     await chrome.tabs.group({ groupId: developer.id, tabIds: [tab.id] });
     return { tabId: tab.id, groupId: developer.id };

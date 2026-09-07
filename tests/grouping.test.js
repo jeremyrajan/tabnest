@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULTS, classify, exactWebUrl, findDuplicateTarget, normalizeDomain, normalizeSettings, planWindow, reconcileOwnership, explainWindow } from "../grouping.js";
+import { DEFAULTS, classify, exactWebUrl, findDuplicateTarget, normalizeDomain, siteDomain, normalizeSettings, planWindow, reconcileOwnership, explainWindow } from "../grouping.js";
 
 const tab = (id, url, extra = {}) => ({ id, url, groupId: -1, windowId: 1, ...extra });
 test("smart categories, domain boundaries, and exact website fallback", () => {
@@ -34,6 +34,12 @@ test("settings and exclusions are normalized", () => {
   assert.equal(normalizeDomain("this is not a domain"), null);
   assert.equal(normalizeDomain("chrome://settings"), null);
   assert.deepEqual(normalizeSettings({ minTabs: 999, excluded: ["Example.com", "www.example.com"] }), { ...DEFAULTS, excluded: ["example.com"] });
+});
+test("learned website domains include ordinary subdomains without merging hosted tenants", () => {
+  assert.equal(siteDomain("https://api.dynoyard.app/keys"), "dynoyard.app");
+  assert.equal(siteDomain("https://sub.example.co.uk/path"), "example.co.uk");
+  assert.equal(siteDomain("https://docs.project.github.io/path"), "project.github.io");
+  assert.equal(siteDomain("http://127.0.0.1:3000"), "127.0.0.1");
 });
 test("existing category catalogs receive Education once without overriding later removal", () => {
   const legacy = [{ title: "Developer", color: "purple", domains: ["github.com"], keywords: [] }];

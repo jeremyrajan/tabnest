@@ -18,6 +18,7 @@ function fixture() {
     tabs: {
       query: async query => state.tabs.filter(tab => Object.entries(query).every(([key, value]) => tab[key] === value)).map(tab => ({ ...tab })),
       get: async id => {
+        if (state.beforeTabGet) await state.beforeTabGet(id);
         const found = state.tabs.find(tab => tab.id === id);
         if (!found) throw new Error("No tab with id");
         return { ...found };
@@ -111,6 +112,21 @@ test("concurrent triggers are serialized without duplicate groups", async () => 
   assert.equal(state.calls.length, 1);
 });
 
+test("a tab pinned after planning is left alone", async () => {
+  const { state, add, engine } = fixture();
+  add(1, 1, { url: "https://github.com/one" });
+  add(2, 1, { url: "https://gitlab.com/two" });
+  state.beforeTabGet = async id => {
+    if (id !== 2) return;
+    state.tabs.find(tab => tab.id === id).pinned = true;
+    delete state.beforeTabGet;
+  };
+  await engine.organize();
+  assert.notEqual(state.tabs.find(tab => tab.id === 1).groupId, -1);
+  assert.equal(state.tabs.find(tab => tab.id === 2).groupId, -1);
+  assert.equal(state.tabs.find(tab => tab.id === 2).pinned, true);
+});
+
 test("remembered website corrections reclassify managed tabs", async () => {
   const { state, add, engine } = fixture();
   add(1, 1, { url: "https://unknown.test/one", title: "Unknown" });
@@ -160,6 +176,9 @@ test("manual tab placement is remembered until that tab closes", async () => {
   await engine.organize();
   const developerId = state.tabs.find(tab => tab.id === 1).groupId;
   const workId = state.tabs.find(tab => tab.id === 3).groupId;
+  assert.equal(await engine.groupChanged(1, -1), false);
+  assert.equal(state.session.manualTabs?.[1], undefined);
+  assert.equal(state.session.tabPlacements[1], developerId);
   assert.equal(await engine.groupChanged(1, developerId), false);
   state.tabs.find(tab => tab.id === 1).groupId = workId;
   assert.equal(await engine.groupChanged(1, workId), true);
@@ -175,7 +194,7 @@ test("manual tab placement is remembered until that tab closes", async () => {
 
 test("moving a website into a category teaches future matching tabs", async () => {
   const { state, api, add, engine } = fixture();
-  add(1, 1, { url: "https://xyz.test/first", title: "Unknown" });
+  add(1, 1, { url: "https://api.xyz.test/first", title: "Unknown" });
   add(2, 1, { url: "https://docs.google.com/document/work" });
   await engine.organize();
   const workId = state.tabs.find(tab => tab.id === 2).groupId;
@@ -184,11 +203,31 @@ test("moving a website into a category teaches future matching tabs", async () =
   assert.deepEqual(state.local.settings.siteRules, [{ domain: "xyz.test", category: "Work", source: "manual" }]);
   await api.tabs.remove(1);
   await engine.forgetTab(1);
-  add(3, 1, { url: "https://app.xyz.test/future", title: "Unknown" });
+  add(3, 1, { url: "https://xyz.test/future", title: "Unknown" });
   await engine.organize();
   assert.equal(state.tabs.find(tab => tab.id === 3).groupId, workId);
   assert.equal(state.session.manualTabs[1], undefined);
   assert.equal(state.local.settings.siteRules[0].domain, "xyz.test");
+});
+
+test("startup imports the majority category for existing manual website placements", async () => {
+  const { state, add, engine } = fixture();
+  add(1, 1, { url: "https://api.dynoyard.app/keys", title: "API keys — Dynoyard", groupId: 50 });
+  add(2, 1, { url: "https://ops.dynoyard.app/noc", title: "NOC — Dynoyard Ops", groupId: 50 });
+  add(3, 1, { url: "https://dashboard.stripe.com/customers", title: "Customers — Dynoyard", groupId: 51 });
+  state.groups.push(
+    { id: 50, windowId: 1, title: "🤖 AI Apps", color: "cyan" },
+    { id: 51, windowId: 1, title: "💰 Finance", color: "green" }
+  );
+  state.session.owned = [
+    { id: 50, key: "topic:AI Apps", title: "🤖 AI Apps", color: "cyan" },
+    { id: 51, key: "topic:Finance", title: "💰 Finance", color: "green" }
+  ];
+  await engine.initialize();
+  assert.deepEqual(state.local.settings.siteRules, [{ domain: "dynoyard.app", category: "AI Apps", source: "manual" }]);
+  add(4, 1, { url: "https://dynoyard.app", title: "Overview — Dynoyard" });
+  await engine.organize();
+  assert.equal(state.tabs.find(tab => tab.id === 4).groupId, 50);
 });
 
 test("moving a website into a custom group routes future tabs while that group exists", async () => {

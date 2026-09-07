@@ -77,6 +77,20 @@ export function normalizeDomain(value) {
     return url.hostname.replace(/^www\./, "").replace(/\.$/, "");
   } catch { return null; }
 }
+const MULTI_LABEL_SUFFIXES = new Set([
+  "co.uk", "org.uk", "ac.uk", "com.au", "net.au", "org.au", "co.nz", "co.jp", "co.in", "firm.in", "net.in", "org.in", "com.sg", "com.br", "com.mx", "co.za"
+]);
+const HOSTED_SITE_SUFFIXES = new Set([
+  "github.io", "pages.dev", "workers.dev", "vercel.app", "netlify.app", "web.app", "firebaseapp.com", "appspot.com", "herokuapp.com", "onrender.com", "fly.dev", "cloudfront.net", "azurewebsites.net", "notion.site", "wordpress.com", "blogspot.com"
+]);
+export function siteDomain(value) {
+  const host = normalizeDomain(value);
+  if (!host || host === "localhost" || host.includes(":") || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host)) return host;
+  const labels = host.split(".");
+  if (labels.length <= 2) return host;
+  const suffix = labels.slice(-2).join(".");
+  return MULTI_LABEL_SUFFIXES.has(suffix) || HOSTED_SITE_SUFFIXES.has(suffix) ? labels.slice(-3).join(".") : suffix;
+}
 export function normalizeSettings(raw = {}) {
   return {
     enabled: raw.enabled !== false,
