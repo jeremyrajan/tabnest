@@ -20,6 +20,18 @@ node --test tests/*.test.js
 
 The optional browser test requires Playwright and Chrome for Testing. Its environment variables and behavior are documented in the main README.
 
+## Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) with a short, imperative summary:
+
+```text
+feat: remember manual tab placements
+fix: avoid duplicate category groups
+docs: clarify unpacked installation
+```
+
+Use `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `style`, `build`, `ci`, `chore`, or `revert` as appropriate. Add `!` before the colon and describe the migration in the commit body when a change is breaking.
+
 ## Pull requests
 
 - Keep classification deterministic, local, and explainable.
