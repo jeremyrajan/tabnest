@@ -33,6 +33,7 @@ Automatic grouping starts on installation. Click the Tabnest icon to organize im
 - **Corrections**: use **Correct a website** in the popup to assign any open website to a category. Tabnest remembers up to 300 corrections and applies one to that domain and its subdomains. Corrections can be removed in Manage categories.
 - **Browsing fallback**: an unrecognized site goes into Browsing by default. Turn this off to group unrecognized sites by exact hostname, where the website minimum of 2–5 tabs applies.
 - Category groups can start with one tab, so a single GitHub tab becomes Developer and a single AI Studio tab becomes AI Apps.
+- **Manual placement locks:** move a tab into another group or take it out of a group yourself and Tabnest leaves it exactly where you put it, even if its title or address later changes. The lock lasts for that tab's lifetime and is removed from session state when the tab closes.
 - **Exact-URL reuse** (on by default): when a newly opened tab finishes loading and an older tab in the same window has the identical normalized HTTP or HTTPS URL, Tabnest activates the older tab and closes the new duplicate. Query strings and fragments are significant. Existing tabs and cross-window matches are not closed.
 - New tabs and completed navigations trigger grouping after about 1.5 seconds. Continuing tab activity does not reset that timer. A one-minute alarm provides a fallback if Chrome suspends the worker or tabs are temporarily busy. Chrome may delay background work when asleep or busy.
 - Every regular window is organized independently. Tabs are never transferred between windows.
@@ -51,7 +52,7 @@ Automatic grouping starts on installation. Click the Tabnest icon to organize im
 
 **Manage categories & matching rules:** edit the full local category catalog and remove remembered website corrections. Category changes are stored with your other local settings.
 
-**Ungroup Tabnest groups & pause:** removes groups managed by this installation in the current browser session, across all windows, and pauses automatic grouping. All tabs remain open. It does not restore their original tab order or affect manually created/renamed/recolored groups.
+**Release automatic placements & pause:** removes automatically placed tabs from groups managed by this installation, across all windows, and pauses automatic grouping. All tabs remain open. Tabs placed by you stay where you put them; manually created, renamed, or recolored groups remain yours.
 
 ### Browser restarts
 
@@ -79,7 +80,7 @@ Run the dependency-free tests with Node.js 20 or newer:
 node --test tests/*.test.js
 ```
 
-`tests/browser-smoke.mjs` additionally tests the actual extension in an isolated browser profile using Playwright and Chrome for Testing. It verifies event-driven automatic grouping, pinned tabs, the popup, exclusions, pause, and manual-group preservation. All test website requests are fulfilled locally. Install Playwright separately or set `PLAYWRIGHT_MODULE` to its `index.mjs`; optionally set `CHROMIUM_EXECUTABLE` to a compatible Chrome for Testing executable. Run:
+`tests/browser-smoke.mjs` additionally tests the actual extension in an isolated browser profile using Playwright and Chrome for Testing. It verifies event-driven automatic grouping, pinned tabs, sticky manual tab placement, the popup, exclusions, pause, and manual-group preservation. All test website requests are fulfilled locally. Install Playwright separately or set `PLAYWRIGHT_MODULE` to its `index.mjs`; optionally set `CHROMIUM_EXECUTABLE` to a compatible Chrome for Testing executable. Run:
 
 ```sh
 node tests/browser-smoke.mjs

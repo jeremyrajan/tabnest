@@ -66,6 +66,31 @@ try {
   assert.equal(developerGroups.length, 1);
   assert.equal(state.tabs.filter(tab => tab.groupId === developerGroups[0].id).length, 4);
   console.log("PASS: lost ownership is reconstructed without creating duplicate Developer groups");
+  const manuallyPlaced = await context.newPage();
+  await manuallyPlaced.goto("https://youtube.com/manual-placement");
+  await new Promise(resolve => setTimeout(resolve, 2200));
+  const manualPlacement = await worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ url: "https://youtube.com/manual-placement" });
+    const [developer] = await chrome.tabGroups.query({ title: "💻 Developer" });
+    await chrome.tabs.group({ groupId: developer.id, tabIds: [tab.id] });
+    return { tabId: tab.id, groupId: developer.id };
+  });
+  await new Promise(resolve => setTimeout(resolve, 2200));
+  state = await worker.evaluate(async () => ({
+    tabs: await chrome.tabs.query({}),
+    manualTabs: (await chrome.storage.session.get("manualTabs")).manualTabs || {}
+  }));
+  assert.equal(state.tabs.find(tab => tab.id === manualPlacement.tabId).groupId, manualPlacement.groupId);
+  assert.equal(state.manualTabs[manualPlacement.tabId], manualPlacement.groupId);
+  await manuallyPlaced.goto("https://docs.google.com/document/manual-placement");
+  await new Promise(resolve => setTimeout(resolve, 2200));
+  state = await worker.evaluate(async () => ({ tabs: await chrome.tabs.query({}) }));
+  assert.equal(state.tabs.find(tab => tab.id === manualPlacement.tabId).groupId, manualPlacement.groupId);
+  await manuallyPlaced.close();
+  await new Promise(resolve => setTimeout(resolve, 250));
+  const manualTabsAfterClose = await worker.evaluate(async () => (await chrome.storage.session.get("manualTabs")).manualTabs || {});
+  assert.equal(manualTabsAfterClose[manualPlacement.tabId], undefined);
+  console.log("PASS: manually placed tabs stay in their chosen group until they close");
   const popup = await context.newPage();
   popup.on("pageerror", error => errors.push(error.message));
   await popup.goto(`chrome-extension://${id}/popup.html`);
@@ -89,7 +114,7 @@ try {
     await chrome.tabGroups.update(tab.groupId, { title: "My project" });
   });
   await popup.locator("#release").click();
-  await popup.waitForFunction(() => document.querySelector("#message").textContent.includes("groups removed"));
+  await popup.waitForFunction(() => document.querySelector("#message").textContent.includes("Automatic placements released"));
   state = await worker.evaluate(async () => ({ tabs: await chrome.tabs.query({}), groups: await chrome.tabGroups.query({}) }));
   assert.equal(state.groups.length, 1);
   assert.equal(state.groups[0].title, "My project");

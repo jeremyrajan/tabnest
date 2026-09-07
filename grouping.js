@@ -117,8 +117,9 @@ export function classify(tab, settings) {
   return { key: `site:${host}`, title: host, color: COLORS[hash % COLORS.length] };
 }
 
-export function planWindow(tabs, groups, owned, settings) {
+export function planWindow(tabs, groups, owned, settings, manualTabIds = []) {
   const live = new Map(groups.map(group => [group.id, group]));
+  const manual = new Set(manualTabIds);
   const managed = owned.filter(item => {
     const group = live.get(item.id);
     return group && group.title === item.title && group.color === item.color;
@@ -127,6 +128,7 @@ export function planWindow(tabs, groups, owned, settings) {
   const buckets = new Map();
   const ungroup = [];
   for (const tab of tabs) {
+    if (manual.has(tab.id)) continue;
     if (tab.groupId !== -1 && !ids.has(tab.groupId)) continue;
     const category = classify(tab, settings);
     if (!category) {
@@ -139,7 +141,7 @@ export function planWindow(tabs, groups, owned, settings) {
   const actions = [];
   let loose = [];
   for (const bucket of buckets.values()) {
-    const target = managed.find(group => group.key === bucket.key && bucket.tabs.some(tab => tab.groupId === group.id));
+    const target = managed.find(group => group.key === bucket.key && tabs.some(tab => tab.groupId === group.id));
     if (bucket.tabs.length < (bucket.key.startsWith("topic:") ? 1 : settings.minTabs) && !target) {
       loose.push(...bucket.tabs);
       continue;
@@ -185,13 +187,15 @@ export function reconcileOwnership(tabs, groups, owned, settings) {
   return reconciled;
 }
 
-export function explainWindow(tabs, groups, owned, settings) {
-  const plan = planWindow(tabs, groups, owned, settings);
+export function explainWindow(tabs, groups, owned, settings, manualTabIds = []) {
+  const plan = planWindow(tabs, groups, owned, settings, manualTabIds);
+  const manual = new Set(manualTabIds);
   const managedIds = new Set(plan.managed.map(group => group.id));
-  const summary = { pinned: 0, existing: 0, ineligible: 0, eligible: 0, waiting: 0, ready: 0 };
+  const summary = { pinned: 0, manual: 0, existing: 0, ineligible: 0, eligible: 0, waiting: 0, ready: 0 };
   const readyIds = new Set(plan.actions.flatMap(action => action.tabIds));
   for (const tab of tabs) {
     if (tab.pinned) summary.pinned++;
+    else if (manual.has(tab.id)) summary.manual++;
     else if (tab.groupId !== -1 && !managedIds.has(tab.groupId)) summary.existing++;
     else if (!classify(tab, settings)) summary.ineligible++;
     else {

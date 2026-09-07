@@ -147,8 +147,30 @@ test("page metadata reclassifies an unclear tab and is cleared when it closes", 
   assert.equal(state.groups.length, 1);
   assert.equal(state.groups[0].title, "🎬 Media");
   assert.equal(state.session.tabMetadata[1].description, "Watch video online with curated episodes");
-  await engine.forgetMetadata(1);
+  await engine.forgetTab(1);
   assert.equal(state.session.tabMetadata[1], undefined);
+});
+
+test("manual tab placement is remembered until that tab closes", async () => {
+  const { state, add, engine } = fixture();
+  add(1, 1, { url: "https://github.com/one" });
+  add(2, 1, { url: "https://gitlab.com/two" });
+  add(3, 1, { url: "https://docs.google.com/document/three" });
+  add(4, 1, { url: "https://notion.so/four" });
+  await engine.organize();
+  const developerId = state.tabs.find(tab => tab.id === 1).groupId;
+  const workId = state.tabs.find(tab => tab.id === 3).groupId;
+  assert.equal(await engine.groupChanged(1, developerId), false);
+  state.tabs.find(tab => tab.id === 1).groupId = workId;
+  assert.equal(await engine.groupChanged(1, workId), true);
+  await engine.organize();
+  assert.equal(state.tabs.find(tab => tab.id === 1).groupId, workId);
+  assert.equal(state.session.manualTabs[1], workId);
+  await engine.release();
+  assert.equal(state.tabs.find(tab => tab.id === 1).groupId, workId);
+  await engine.forgetTab(1);
+  assert.equal(state.session.manualTabs[1], undefined);
+  assert.equal(state.session.tabPlacements[1], undefined);
 });
 
 test("duplicate category groups left by an extension reload are merged", async () => {
@@ -175,6 +197,18 @@ test("a newly loaded exact URL reuses the older tab", async () => {
   assert.deepEqual(state.tabs.map(tab => tab.id), [1]);
   assert.equal(state.tabs[0].active, true);
   assert.equal(state.session.duplicateCount, 1);
+});
+
+test("a manually placed new tab is not closed as a duplicate", async () => {
+  const { state, add, engine } = fixture();
+  add(1, 1, { url: "https://github.com/project", groupId: 50 });
+  add(2, 1, { url: "https://github.com/project", active: true });
+  state.groups.push({ id: 50, windowId: 1, title: "My project", color: "blue" });
+  await engine.trackNewTab(2, -1);
+  state.tabs.find(tab => tab.id === 2).groupId = 50;
+  await engine.groupChanged(2, 50);
+  assert.equal(await engine.reuseDuplicate(2), false);
+  assert.deepEqual(state.tabs.map(tab => tab.id), [1, 2]);
 });
 
 test("established tabs, distinct URLs, and disabled reuse are preserved", async () => {

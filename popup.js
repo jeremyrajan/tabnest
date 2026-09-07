@@ -27,6 +27,7 @@ async function refresh(fill = false) {
   const reasons = [];
   if (info?.ready) reasons.push(`${info.ready} tabs ready to group`);
   if (info?.waiting) reasons.push(`${info.waiting} tabs need more matches (minimum ${settings.minTabs})`);
+  if (info?.manual) reasons.push(`${info.manual} tabs placed by you`);
   if (info?.existing) reasons.push(`${info.existing} tabs in existing groups`);
   if (info?.pinned) reasons.push(`${info.pinned} pinned tabs skipped`);
   if (info?.ineligible) reasons.push(`${info.ineligible} excluded or browser tabs skipped`);
@@ -114,7 +115,7 @@ $("save").addEventListener("click", () => run(async () => {
 $("release").addEventListener("click", () => run(async () => {
   await send("release");
   await refresh();
-  message("Tabnest groups removed for this session. Auto grouping is paused.");
+  message("Automatic placements released. Auto grouping is paused.");
 }));
 run(async () => {
   windowId = (await chrome.windows.getCurrent()).id;

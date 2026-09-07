@@ -47,6 +47,18 @@ test("category singletons group immediately; manual groups remain untouched", ()
   assert.deepEqual(result.actions[0].tabIds, [1, 2]);
   assert.equal(result.actions[1].title, "Design");
 });
+test("tabs placed manually stay put and still anchor their managed group", () => {
+  const owned = [{ id: 10, title: "💻 Developer", color: "purple", key: "topic:Developer" }];
+  const tabs = [
+    tab(1, "https://youtube.com/watch/1", { groupId: 10 }),
+    tab(2, "https://gitlab.com/project")
+  ];
+  const result = planWindow(tabs, [{ id: 10, title: "💻 Developer", color: "purple" }], owned, DEFAULTS, [1]);
+  assert.deepEqual(result.ungroup, []);
+  assert.equal(result.actions[0].groupId, 10);
+  assert.deepEqual(result.actions[0].tabIds, [2]);
+  assert.equal(explainWindow(tabs, [{ id: 10, title: "💻 Developer", color: "purple" }], owned, DEFAULTS, [1]).manual, 1);
+});
 test("joins managed groups and releases tabs that navigate to excluded sites", () => {
   const owned = [{ id: 10, title: "Developer", color: "purple", key: "topic:Developer" }];
   const tabs = [tab(1, "https://github.com", { groupId: 10 }), tab(2, "https://gitlab.com"), tab(3, "https://example.com", { groupId: 10 })];

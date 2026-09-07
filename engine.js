@@ -16,6 +16,20 @@ export function createEngine(api) {
   async function newTabCandidates() {
     return (await api.storage.session.get("newTabCandidates")).newTabCandidates || {};
   }
+  async function manualTabs() {
+    return (await api.storage.session.get("manualTabs")).manualTabs || {};
+  }
+  async function syncTabPlacements() {
+    const tabs = await api.tabs.query({});
+    const liveIds = new Set(tabs.map(tab => String(tab.id)));
+    const locked = await manualTabs();
+    for (const id of Object.keys(locked)) if (!liveIds.has(id)) delete locked[id];
+    await api.storage.session.set({
+      tabPlacements: Object.fromEntries(tabs.map(tab => [tab.id, tab.groupId])),
+      manualTabs: locked
+    });
+    return locked;
+  }
   async function clearCandidate(tabId) {
     const candidates = await newTabCandidates();
     delete candidates[tabId];
@@ -36,6 +50,9 @@ export function createEngine(api) {
     const config = await settings();
     if (!config.enabled && !force) return { changed: 0 };
     const windows = await api.windows.getAll({ windowTypes: ["normal"] });
+    const locked = await manualTabs();
+    const manualTabIds = Object.keys(locked).map(Number);
+    const { tabPlacements = {} } = await api.storage.session.get("tabPlacements");
     let owned = await validOwnership();
     let changed = 0;
     const errors = [];
@@ -49,9 +66,10 @@ export function createEngine(api) {
         const thisWindow = owned.filter(item => windowGroupIds.has(item.id));
         owned = [...otherWindows, ...reconcileOwnership(tabs, groups, thisWindow, config)];
         await api.storage.session.set({ owned });
-        const plan = planWindow(tabs, groups, owned, config);
+        const plan = planWindow(tabs, groups, owned, config, manualTabIds);
         if (plan.ungroup.length) {
           await api.tabs.ungroup(plan.ungroup);
+          for (const id of plan.ungroup) tabPlacements[id] = -1;
           changed += plan.ungroup.length;
         }
         for (const action of plan.actions) {
@@ -59,7 +77,10 @@ export function createEngine(api) {
           let groupId = action.groupId;
           const groupTitle = action.groupTitle || action.title;
           if (groupId !== undefined) {
-            if (action.tabIds.length) await api.tabs.group({ groupId, tabIds: action.tabIds });
+            if (action.tabIds.length) {
+              await api.tabs.group({ groupId, tabIds: action.tabIds });
+              for (const id of action.tabIds) tabPlacements[id] = groupId;
+            }
             if (action.updateGroup) {
               await api.tabGroups.update(groupId, { title: groupTitle, color: action.color });
               const record = owned.find(item => item.id === groupId);
@@ -68,6 +89,7 @@ export function createEngine(api) {
             }
           } else {
             groupId = await api.tabs.group({ createProperties: { windowId: window.id }, tabIds: action.tabIds });
+            for (const id of action.tabIds) tabPlacements[id] = groupId;
             const record = { id: groupId, key: action.key, title: groupTitle, color: action.color };
             // Record ownership before further mutations so failures can be recovered.
             owned.push(record);
@@ -80,7 +102,10 @@ export function createEngine(api) {
             } catch (error) {
               // Return a partially-created group to ungrouped tabs so a later pass can retry.
               const members = await api.tabs.query({ groupId });
-              if (members.length) await api.tabs.ungroup(members.map(tab => tab.id));
+              if (members.length) {
+                await api.tabs.ungroup(members.map(tab => tab.id));
+                for (const tab of members) tabPlacements[tab.id] = -1;
+              }
               throw error;
             }
           }
@@ -92,10 +117,11 @@ export function createEngine(api) {
     }
     // Prune groups removed by moves, tab closures, or user edits.
     owned = await validOwnership();
-    await api.storage.session.set({ owned, lastRun: { at: Date.now(), changed, errors } });
+    await api.storage.session.set({ owned, tabPlacements, lastRun: { at: Date.now(), changed, errors } });
     return { changed, errors };
   }
   return {
+    initialize: () => serialize(syncTabPlacements),
     organize: options => serialize(() => organize(options)),
     save: config => serialize(async () => {
       const saved = normalizeSettings(config);
@@ -115,11 +141,23 @@ export function createEngine(api) {
       const result = await organize({ force: true });
       if (result.errors?.length) throw new Error(`Website rule saved. Chrome could not finish grouping: ${result.errors.join("; ")}`);
     }),
-    trackNewTab: tabId => serialize(async () => {
+    trackNewTab: (tabId, groupId = -1) => serialize(async () => {
       if (!Number.isInteger(tabId)) return;
       const candidates = await newTabCandidates();
       candidates[tabId] = Date.now();
-      await api.storage.session.set({ newTabCandidates: candidates });
+      const { tabPlacements = {} } = await api.storage.session.get("tabPlacements");
+      tabPlacements[tabId] = Number.isInteger(groupId) ? groupId : -1;
+      await api.storage.session.set({ newTabCandidates: candidates, tabPlacements });
+    }),
+    groupChanged: (tabId, groupId) => serialize(async () => {
+      if (!Number.isInteger(tabId) || !Number.isInteger(groupId)) return false;
+      const { tabPlacements = {}, manualTabs: locked = {} } = await api.storage.session.get(["tabPlacements", "manualTabs"]);
+      const previous = tabPlacements[tabId];
+      const changedByUser = previous === undefined || previous !== groupId;
+      tabPlacements[tabId] = groupId;
+      if (changedByUser) locked[tabId] = groupId;
+      await api.storage.session.set({ tabPlacements, manualTabs: locked });
+      return changedByUser;
     }),
     reuseDuplicate: tabId => serialize(async () => {
       const candidates = await newTabCandidates();
@@ -132,6 +170,7 @@ export function createEngine(api) {
       if (current.status !== "complete") return false;
       await clearCandidate(tabId);
       if (!(await settings()).reuseDuplicates) return false;
+      if (Object.hasOwn(await manualTabs(), tabId)) return false;
       const tabs = await api.tabs.query({ windowId: current.windowId });
       const target = findDuplicateTarget(current, tabs);
       if (!target) return false;
@@ -157,22 +196,26 @@ export function createEngine(api) {
       await api.storage.session.set({ tabMetadata });
       return organize({ windowId });
     }),
-    forgetMetadata: tabId => serialize(async () => {
-      const { tabMetadata = {} } = await api.storage.session.get("tabMetadata");
+    forgetTab: tabId => serialize(async () => {
+      const { tabMetadata = {}, tabPlacements = {}, manualTabs: locked = {} } = await api.storage.session.get(["tabMetadata", "tabPlacements", "manualTabs"]);
       delete tabMetadata[tabId];
+      delete tabPlacements[tabId];
+      delete locked[tabId];
       const candidates = await newTabCandidates();
       delete candidates[tabId];
-      await api.storage.session.set({ tabMetadata, newTabCandidates: candidates });
+      await api.storage.session.set({ tabMetadata, tabPlacements, manualTabs: locked, newTabCandidates: candidates });
     }),
     status: windowId => serialize(async () => {
       const config = await settings();
       const tabs = await enrichTabs(await api.tabs.query({ windowId }));
       const groups = await api.tabGroups.query({ windowId });
       const owned = await validOwnership();
+      const locked = await manualTabs();
+      const manualTabIds = Object.keys(locked).map(Number);
       const { lastRun, duplicateCount = 0 } = await api.storage.session.get(["lastRun", "duplicateCount"]);
       return {
         settings: config, total: tabs.length, grouped: tabs.filter(tab => tab.groupId !== -1).length,
-        diagnostics: explainWindow(tabs, groups, owned, config),
+        diagnostics: explainWindow(tabs, groups, owned, config, manualTabIds),
         websites: [...new Set(tabs.filter(tab => !tab.pinned && classify(tab, config)).map(tab => normalizeDomain(tab.pendingUrl || tab.url)).filter(Boolean))].sort().map(domain => {
           const tab = tabs.find(tab => normalizeDomain(tab.pendingUrl || tab.url) === domain);
           const category = classify(tab, config);
@@ -186,11 +229,17 @@ export function createEngine(api) {
     release: () => serialize(async () => {
       await api.storage.local.set({ settings: { ...await settings(), enabled: false } });
       const owned = await validOwnership();
+      const locked = new Set(Object.keys(await manualTabs()).map(Number));
+      const { tabPlacements = {} } = await api.storage.session.get("tabPlacements");
       for (const group of owned) {
         const tabs = await api.tabs.query({ groupId: group.id });
-        if (tabs.length) await api.tabs.ungroup(tabs.map(tab => tab.id));
+        const releasable = tabs.filter(tab => !locked.has(tab.id)).map(tab => tab.id);
+        if (releasable.length) {
+          await api.tabs.ungroup(releasable);
+          for (const id of releasable) tabPlacements[id] = -1;
+        }
       }
-      await api.storage.session.set({ owned: [] });
+      await api.storage.session.set({ owned: [], tabPlacements });
     }),
     toggleGroup: (id, windowId) => serialize(async () => {
       const group = await api.tabGroups.get(id);
