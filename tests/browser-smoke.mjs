@@ -90,7 +90,13 @@ try {
   await new Promise(resolve => setTimeout(resolve, 250));
   const manualTabsAfterClose = await worker.evaluate(async () => (await chrome.storage.session.get("manualTabs")).manualTabs || {});
   assert.equal(manualTabsAfterClose[manualPlacement.tabId], undefined);
-  console.log("PASS: manually placed tabs stay in their chosen group until they close");
+  const learnedPlacement = await context.newPage();
+  await learnedPlacement.goto("https://youtube.com/learned-placement");
+  await new Promise(resolve => setTimeout(resolve, 2200));
+  state = await worker.evaluate(async () => ({ tabs: await chrome.tabs.query({}) }));
+  assert.equal(state.tabs.find(tab => tab.url === "https://youtube.com/learned-placement").groupId, manualPlacement.groupId);
+  await learnedPlacement.close();
+  console.log("PASS: manually placed tabs stay put, clean up on close, and teach future website tabs");
   const popup = await context.newPage();
   popup.on("pageerror", error => errors.push(error.message));
   await popup.goto(`chrome-extension://${id}/popup.html`);

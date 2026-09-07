@@ -86,7 +86,7 @@ export function normalizeSettings(raw = {}) {
     collectLoose: raw.collectLoose !== false,
     reuseDuplicates: raw.reuseDuplicates !== false,
     categories: migrateCategories(raw),
-    siteRules: Array.isArray(raw.siteRules) ? raw.siteRules.filter(rule => rule && normalizeDomain(rule.domain) && typeof rule.category === "string").slice(0, 300).map(rule => ({ domain: normalizeDomain(rule.domain), category: rule.category.slice(0, 40) })) : [],
+    siteRules: Array.isArray(raw.siteRules) ? raw.siteRules.filter(rule => rule && normalizeDomain(rule.domain) && typeof rule.category === "string").slice(0, 300).map(rule => ({ domain: normalizeDomain(rule.domain), category: rule.category.slice(0, 40), ...(rule.source === "manual" ? { source: "manual" } : {}) })) : [],
     excluded: Array.isArray(raw.excluded) ? [...new Set(raw.excluded.map(normalizeDomain).filter(Boolean))].slice(0, 100) : [],
     categorySchemaVersion: CATEGORY_SCHEMA_VERSION
   };

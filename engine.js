@@ -1,4 +1,4 @@
-import { normalizeSettings, normalizeDomain, classify, findDuplicateTarget, planWindow, reconcileOwnership, explainWindow } from "./grouping.js";
+import { normalizeSettings, normalizeDomain, categoryGroupTitle, matchesDomain, classify, findDuplicateTarget, planWindow, reconcileOwnership, explainWindow } from "./grouping.js";
 
 export function createEngine(api) {
   let queue = Promise.resolve();
@@ -19,16 +19,45 @@ export function createEngine(api) {
   async function manualTabs() {
     return (await api.storage.session.get("manualTabs")).manualTabs || {};
   }
+  async function manualSiteGroups() {
+    return (await api.storage.session.get("manualSiteGroups")).manualSiteGroups || [];
+  }
   async function syncTabPlacements() {
     const tabs = await api.tabs.query({});
+    const groups = await api.tabGroups.query({});
     const liveIds = new Set(tabs.map(tab => String(tab.id)));
+    const liveGroupIds = new Set(groups.map(group => group.id));
     const locked = await manualTabs();
     for (const id of Object.keys(locked)) if (!liveIds.has(id)) delete locked[id];
     await api.storage.session.set({
       tabPlacements: Object.fromEntries(tabs.map(tab => [tab.id, tab.groupId])),
-      manualTabs: locked
+      manualTabs: locked,
+      manualSiteGroups: (await manualSiteGroups()).filter(rule => liveGroupIds.has(rule.groupId))
     });
     return locked;
+  }
+  async function learnManualSitePlacement(tabId, groupId) {
+    let tab;
+    try { tab = await api.tabs.get(tabId); } catch { return; }
+    const domain = normalizeDomain(tab.pendingUrl || tab.url);
+    if (!domain) return;
+    const config = await settings();
+    let siteRules = config.siteRules.filter(rule => !(rule.domain === domain && rule.source === "manual"));
+    let groupRules = (await manualSiteGroups()).filter(rule => !(rule.domain === domain && rule.windowId === tab.windowId));
+    if (groupId !== -1) {
+      let group;
+      try { group = await api.tabGroups.get(groupId); } catch { return; }
+      const category = config.categories.find(item => group.color === item.color && (group.title === item.title || group.title === categoryGroupTitle(item)));
+      const otherSiteRules = siteRules.filter(rule => rule.domain !== domain);
+      if (category && otherSiteRules.length < 300) {
+        siteRules = otherSiteRules;
+        siteRules.push({ domain, category: category.title, source: "manual" });
+      } else {
+        groupRules.push({ domain, windowId: tab.windowId, groupId });
+      }
+    }
+    await api.storage.local.set({ settings: { ...config, siteRules } });
+    await api.storage.session.set({ manualSiteGroups: groupRules.slice(-300) });
   }
   async function clearCandidate(tabId) {
     const candidates = await newTabCandidates();
@@ -52,7 +81,12 @@ export function createEngine(api) {
     const windows = await api.windows.getAll({ windowTypes: ["normal"] });
     const locked = await manualTabs();
     const manualTabIds = Object.keys(locked).map(Number);
+    const manualTabIdSet = new Set(manualTabIds);
     const { tabPlacements = {} } = await api.storage.session.get("tabPlacements");
+    const liveGroups = await api.tabGroups.query({});
+    const liveGroupIds = new Set(liveGroups.map(group => group.id));
+    const learnedGroups = (await manualSiteGroups()).filter(rule => liveGroupIds.has(rule.groupId));
+    await api.storage.session.set({ manualSiteGroups: learnedGroups });
     let owned = await validOwnership();
     let changed = 0;
     const errors = [];
@@ -66,7 +100,35 @@ export function createEngine(api) {
         const thisWindow = owned.filter(item => windowGroupIds.has(item.id));
         owned = [...otherWindows, ...reconcileOwnership(tabs, groups, thisWindow, config)];
         await api.storage.session.set({ owned });
-        const plan = planWindow(tabs, groups, owned, config, manualTabIds);
+        const managedIds = new Set(owned.map(group => group.id));
+        const sitePlaced = new Set();
+        const routes = new Map();
+        for (const tab of tabs) {
+          if (manualTabIdSet.has(tab.id) || tab.pinned || tab.incognito) continue;
+          const host = normalizeDomain(tab.pendingUrl || tab.url);
+          if (!host || config.excluded.some(domain => matchesDomain(host, domain))) continue;
+          const rule = learnedGroups
+            .filter(item => item.windowId === window.id && host && matchesDomain(host, item.domain))
+            .sort((a, b) => b.domain.length - a.domain.length)[0];
+          if (!rule) continue;
+          if (tab.groupId !== -1 && tab.groupId !== rule.groupId && !managedIds.has(tab.groupId)) continue;
+          sitePlaced.add(tab.id);
+          if (tab.groupId !== rule.groupId) {
+            if (!routes.has(rule.groupId)) routes.set(rule.groupId, []);
+            routes.get(rule.groupId).push(tab.id);
+          }
+        }
+        for (const [groupId, tabIds] of routes) {
+          await api.tabs.group({ groupId, tabIds });
+          for (const id of tabIds) {
+            tabPlacements[id] = groupId;
+            const tab = tabs.find(item => item.id === id);
+            if (tab) tab.groupId = groupId;
+          }
+          changed += tabIds.length;
+        }
+        const protectedTabIds = [...manualTabIdSet, ...sitePlaced];
+        const plan = planWindow(tabs, groups, owned, config, protectedTabIds);
         if (plan.ungroup.length) {
           await api.tabs.ungroup(plan.ungroup);
           for (const id of plan.ungroup) tabPlacements[id] = -1;
@@ -155,7 +217,10 @@ export function createEngine(api) {
       const previous = tabPlacements[tabId];
       const changedByUser = previous === undefined || previous !== groupId;
       tabPlacements[tabId] = groupId;
-      if (changedByUser) locked[tabId] = groupId;
+      if (changedByUser) {
+        locked[tabId] = groupId;
+        await learnManualSitePlacement(tabId, groupId);
+      }
       await api.storage.session.set({ tabPlacements, manualTabs: locked });
       return changedByUser;
     }),

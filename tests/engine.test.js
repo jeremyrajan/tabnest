@@ -173,6 +173,38 @@ test("manual tab placement is remembered until that tab closes", async () => {
   assert.equal(state.session.tabPlacements[1], undefined);
 });
 
+test("moving a website into a category teaches future matching tabs", async () => {
+  const { state, api, add, engine } = fixture();
+  add(1, 1, { url: "https://xyz.test/first", title: "Unknown" });
+  add(2, 1, { url: "https://docs.google.com/document/work" });
+  await engine.organize();
+  const workId = state.tabs.find(tab => tab.id === 2).groupId;
+  await api.tabs.group({ groupId: workId, tabIds: [1] });
+  await engine.groupChanged(1, workId);
+  assert.deepEqual(state.local.settings.siteRules, [{ domain: "xyz.test", category: "Work", source: "manual" }]);
+  await api.tabs.remove(1);
+  await engine.forgetTab(1);
+  add(3, 1, { url: "https://app.xyz.test/future", title: "Unknown" });
+  await engine.organize();
+  assert.equal(state.tabs.find(tab => tab.id === 3).groupId, workId);
+  assert.equal(state.session.manualTabs[1], undefined);
+  assert.equal(state.local.settings.siteRules[0].domain, "xyz.test");
+});
+
+test("moving a website into a custom group routes future tabs while that group exists", async () => {
+  const { state, api, add, engine } = fixture();
+  add(1, 1, { url: "https://xyz.test/first", title: "Unknown" });
+  add(2, 1, { url: "https://project.test/home", groupId: 50 });
+  state.groups.push({ id: 50, windowId: 1, title: "My project", color: "red" });
+  await engine.save({ collectLoose: false });
+  await api.tabs.group({ groupId: 50, tabIds: [1] });
+  await engine.groupChanged(1, 50);
+  assert.deepEqual(state.session.manualSiteGroups, [{ domain: "xyz.test", windowId: 1, groupId: 50 }]);
+  add(3, 1, { url: "https://sub.xyz.test/future", title: "Unknown" });
+  await engine.organize();
+  assert.equal(state.tabs.find(tab => tab.id === 3).groupId, 50);
+});
+
 test("duplicate category groups left by an extension reload are merged", async () => {
   const { state, add, engine } = fixture();
   add(1, 1, { groupId: 50, url: "https://github.com" });
